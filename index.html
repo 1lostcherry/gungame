@@ -1,0 +1,60 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no"><title>Flick Shot</title>
+<style>*{margin:0;padding:0;box-sizing:border-box;user-select:none;-webkit-user-select:none}body{background:#111;overflow:hidden;font-family:sans-serif;color:#fff;touch-action:none}canvas{display:block}
+#start,#rot{position:fixed;inset:0;background:#000d;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9;text-align:center;padding:20px}
+#rot{display:none}@media (orientation:portrait){#rot{display:flex}}button{font-size:18px;padding:12px 22px;border:0;border-radius:10px;background:#e33;color:#fff;margin:6px}
+#hud{position:fixed;top:6px;left:8px;right:8px;display:flex;justify-content:space-between;font-weight:bold;text-shadow:0 0 4px #000;pointer-events:none}
+#ctl{position:fixed;bottom:8px;left:8px;right:8px;display:flex;justify-content:space-between;align-items:center}#ctl button{font-size:15px;padding:8px 14px;background:#333c}
+#sens{width:110px}</style></head><body>
+<canvas id="c"></canvas>
+<div id="hud"><span id="score">Score 0</span><span id="gun"></span><span id="ammo"></span></div>
+<div id="ctl"><button id="prev">◀</button><span>Sens <input id="sens" type="range" min="1" max="10" value="5"></span><button id="rl">Reload</button><button id="next">▶</button></div>
+<div id="start"><h1>🔫 FLICK SHOT</h1><p style="margin:12px">Hold phone sideways like a gun. Flick it UP fast to fire.<br>Shake to reload. Swipe or ◀▶ to switch guns. (Desktop: click to shoot, R reload)</p><button id="go">Tap to start</button></div>
+<div id="rot"><h2>↻ Rotate your phone sideways</h2></div>
+<script>
+const G=[
+{n:"Glock 17",cal:"9×19mm",mag:17,mode:"Semi",rpm:400,dmg:25,rec:6,rl:1.6,len:.5,t:"p"},
+{n:"M1911",cal:".45 ACP",mag:7,mode:"Semi",rpm:350,dmg:35,rec:9,rl:1.8,len:.55,t:"p"},
+{n:"Desert Eagle",cal:".50 AE",mag:7,mode:"Semi",rpm:200,dmg:60,rec:18,rl:2,len:.65,t:"p"},
+{n:"MP5",cal:"9×19mm",mag:30,mode:"Auto",rpm:800,dmg:22,rec:4,rl:2.2,len:.8,t:"s"},
+{n:"AK-47",cal:"7.62×39mm",mag:30,mode:"Auto",rpm:600,dmg:40,rec:10,rl:2.5,len:1,t:"r"},
+{n:"M4A1",cal:"5.56×45mm",mag:30,mode:"Auto",rpm:800,dmg:33,rec:7,rl:2.3,len:.95,t:"r"},
+{n:"Remington 870",cal:"12 gauge",mag:4,mode:"Pump",rpm:60,dmg:90,rec:22,rl:3,len:1.05,t:"sg"},
+{n:"AWM (AWP)",cal:".338 Lapua",mag:5,mode:"Bolt",rpm:40,dmg:150,rec:25,rl:3.5,len:1.2,t:"sn"}];
+G.forEach(g=>g.a=g.mag);
+const c=document.getElementById('c'),x=c.getContext('2d');let W,H;function rs(){W=c.width=innerWidth;H=c.height=innerHeight}rs();onresize=rs;
+let gi=0,score=0,last=0,shake=0,flash=0,reloading=0,kick=0,T=[],holes=[];
+const $=id=>document.getElementById(id);
+function hud(){const g=G[gi];$('gun').textContent=g.n+" ("+g.cal+", "+g.mode+")";$('ammo').textContent=reloading?"RELOADING…":g.a+" / "+g.mag;$('score').textContent="Score "+score}
+let ac;function snd(g){if(!ac)return;const d=.15+g.dmg/300,b=ac.createBuffer(1,ac.sampleRate*d,ac.sampleRate),v=b.getChannelData(0);for(let i=0;i<v.length;i++)v[i]=(Math.random()*2-1)*Math.pow(1-i/v.length,3);
+const s=ac.createBufferSource();s.buffer=b;const f=ac.createBiquadFilter();f.type="lowpass";f.frequency.value=4000-g.dmg*15;const gn=ac.createGain();gn.gain.value=1;s.connect(f).connect(gn).connect(ac.destination);s.start();
+const o=ac.createOscillator(),og=ac.createGain();o.frequency.setValueAtTime(150,ac.currentTime);o.frequency.exponentialRampToValueAtTime(40,ac.currentTime+.15);og.gain.setValueAtTime(.8,ac.currentTime);og.gain.exponentialRampToValueAtTime(.001,ac.currentTime+.2);o.connect(og).connect(ac.destination);o.start();o.stop(ac.currentTime+.2)}
+function click(){if(!ac)return;const o=ac.createOscillator(),g=ac.createGain();o.frequency.value=900;g.gain.value=.2;o.connect(g).connect(ac.destination);o.start();o.stop(ac.currentTime+.03)}
+function fire(){const g=G[gi],now=performance.now();if(reloading||now-last<60000/g.rpm)return;last=now;if(g.a<=0){click();return}g.a--;
+snd(g);navigator.vibrate&&navigator.vibrate(30+g.rec*3);shake=g.rec;flash=1;kick=1;
+const pel=g.t=="sg"?8:1;for(let p=0;p<pel;p++){const sp=g.t=="sg"?60:5,hx=W/2+(Math.random()-.5)*sp,hy=H/2+(Math.random()-.5)*sp;holes.push({x:hx,y:hy,l:60});
+for(const t of T)if(Math.hypot(t.x-hx,t.y-hy)<t.r){t.hp-=g.dmg;if(t.hp<=0&&!t.dead){t.dead=1;score+=Math.round(100*(1+Math.hypot(t.x-W/2,0)/W))}}}
+T=T.filter(t=>!t.dead);hud();if(g.a==0)setTimeout(reload,400)}
+function reload(){const g=G[gi];if(reloading||g.a==g.mag)return;reloading=1;hud();click();setTimeout(()=>{g.a=g.mag;reloading=0;click();hud()},g.rl*1000)}
+function sw(d){if(reloading)return;gi=(gi+d+G.length)%G.length;hud()}
+$('prev').onclick=e=>{e.stopPropagation();sw(-1)};$('next').onclick=e=>{e.stopPropagation();sw(1)};$('rl').onclick=e=>{e.stopPropagation();reload()};
+let tx=null;c.addEventListener('touchstart',e=>{tx=e.touches[0].clientX});c.addEventListener('touchend',e=>{const dx=e.changedTouches[0].clientX-tx;if(Math.abs(dx)>60)sw(dx<0?1:-1);else fire()});
+c.addEventListener('mousedown',fire);onkeydown=e=>{if(e.key=="r")reload();if(e.key==" ")fire();if(e.key=="ArrowRight")sw(1);if(e.key=="ArrowLeft")sw(-1)};
+// motion: fast upward flick = big pitch rotation rate
+let armed=1,shk=0;function motion(e){const r=e.rotationRate||{},s=+$('sens').value,th=700-s*55;
+const rot=Math.max(Math.abs(r.alpha||0),Math.abs(r.beta||0),Math.abs(r.gamma||0));
+if(rot>th&&armed){armed=0;fire();setTimeout(()=>armed=1,G[gi].mode=="Auto"?90:250)}
+const a=e.acceleration||{};const m=Math.hypot(a.x||0,a.y||0,a.z||0);if(m>25&&rot<th*.6){if(++shk>4){shk=0;reload()}}else shk=Math.max(0,shk-.2)}
+$('go').onclick=async()=>{ac=new(window.AudioContext||window.webkitAudioContext)();try{if(window.DeviceMotionEvent&&DeviceMotionEvent.requestPermission){const p=await DeviceMotionEvent.requestPermission();if(p!="granted")alert("Motion denied – tap to shoot instead")}}catch(e){}
+addEventListener('devicemotion',motion);try{screen.orientation.lock("landscape")}catch(e){}$('start').style.display='none';hud()};
+function spawn(){if(T.length<4)T.push({x:Math.random()*W*.8+W*.1,y:Math.random()*H*.5+H*.2,r:20+Math.random()*25,vx:(Math.random()-.5)*3,hp:40+Math.random()*60,s:0,life:400})}setInterval(spawn,900);
+function drawGun(g,k){x.save();const L=Math.min(W,H)*g.len*.7;x.translate(W*.62,H+10-k*15);x.rotate(-.25-k*g.rec/80);x.fillStyle="#222";x.strokeStyle="#555";x.lineWidth=2;
+x.beginPath();x.rect(-L*.2,-60,L,22);x.fill();x.stroke();x.fillRect(-L*.1,-40,26,60);
+if(g.t!="p"){x.fillRect(-L*.45,-58,L*.28,26);x.fillRect(L*.15,-38,18,40)}if(g.t=="sn")x.fillRect(L*.05,-80,L*.35,14);if(g.t=="sg")x.fillRect(L*.3,-38,L*.3,12);if(g.t=="r"&&g.n=="AK-47"){x.save();x.translate(L*.25,-38);x.rotate(.3);x.fillRect(0,0,16,40);x.restore()}
+if(flash>0){x.fillStyle="rgba(255,200,50,"+flash+")";x.beginPath();x.arc(L*.8+15,-49,25*flash+g.dmg/5,0,7);x.fill()}x.restore()}
+function loop(){requestAnimationFrame(loop);const sx=(Math.random()-.5)*shake,sy=(Math.random()-.5)*shake;shake*=.85;flash=Math.max(0,flash-.15);kick*=.8;
+x.setTransform(1,0,0,1,sx,sy);const gr=x.createLinearGradient(0,0,0,H);gr.addColorStop(0,"#456");gr.addColorStop(.6,"#789");gr.addColorStop(.6,"#553");gr.addColorStop(1,"#331");x.fillStyle=gr;x.fillRect(-20,-20,W+40,H+40);
+for(const t of T){t.s=Math.min(1,t.s+.08);t.x+=t.vx;if(t.x<t.r||t.x>W-t.r)t.vx*=-1;t.life--;const r=t.r*t.s;["#fff","#d22","#fff","#d22"].forEach((col,i)=>{x.fillStyle=col;x.beginPath();x.arc(t.x,t.y,r*(1-i/4),0,7);x.fill()});x.fillStyle="#530";x.fillRect(t.x-2,t.y+r,4,H*.6-t.y)}
+T=T.filter(t=>t.life>0);holes=holes.filter(h=>h.l-->0);x.fillStyle="#000";holes.forEach(h=>{x.beginPath();x.arc(h.x,h.y,3,0,7);x.fill()});
+const cx=W/2,cy=H/2,cg=8+kick*20;x.strokeStyle="#0f0";x.lineWidth=2;x.beginPath();[[1,0],[-1,0],[0,1],[0,-1]].forEach(([a,b])=>{x.moveTo(cx+a*cg,cy+b*cg);x.lineTo(cx+a*(cg+12),cy+b*(cg+12))});x.stroke();
+if(flash>.5){x.fillStyle="rgba(255,240,200,.15)";x.fillRect(0,0,W,H)}drawGun(G[gi],kick)}loop();hud();
+</script></body></html>
